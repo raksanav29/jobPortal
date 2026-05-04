@@ -1,132 +1,130 @@
+
 // import { Webhook } from "svix";
 // import User from "../models/User.js";
 
-// //API controller function to manage clerk user with database
+// // API controller function to manage clerk user with database
 // export const clerkWebhooks = async (req, res) => {
+//   console.log("🔥 Webhook hit");
+
 //   try {
-//     // CREATE a svix instance with clerk webhook secret.
 //     const whook = new Webhook(process.env.CLERK_WEBHOOK_SECRET);
 
-//     // verifying headers
-//     await whook.verify(JSON.stringify(req.body), {
+//     // ✅ verify using RAW body (important)
+//     await whook.verify(req.body, {
 //       "svix-id": req.headers["svix-id"],
 //       "svix-timestamp": req.headers["svix-timestamp"],
 //       "svix-signature": req.headers["svix-signature"],
 //     });
 
-//     //getting data from request body
-//     const { data, type } = req.body;
+//     // ✅ convert raw buffer to JSON
+//     const body = JSON.parse(req.body.toString());
+//     const { data, type } = body;
 
-//     //switch cases for different events
+//     console.log("Event:", type);
+
 //     switch (type) {
+
 //       case "user.created": {
-
 //         const userData = {
-//             _id:data.id ,
-//             email : data.email_addresses[0].email_address,
-//             name : data.first_name + " " + data.last_name,
-//             image : data.image_url,
-//             resume : ''
-//         }
-//         await User.create(userData)
-//         res.json({}) 
-//         break ;
+//           _id: data.id,
+//           email: data.email_addresses[0].email_address,
+//           name: data.first_name + " " + data.last_name,
+//           image: data.image_url,
+//           resume: "",
+//         };
 
+//         await User.create(userData);
+//         console.log("✅ User saved");
+
+//         return res.status(200).json({ success: true });
 //       }
 
 //       case "user.updated": {
-
 //         const userData = {
-//             email : data.email_addresses[0].email_address,
-//             name : data.first_name + " " + data.last_name,
-//             image : data.image_url,
+//           email: data.email_addresses[0].email_address,
+//           name: data.first_name + " " + data.last_name,
+//           image: data.image_url,
+//         };
+
+//         await User.findByIdAndUpdate(data.id, userData);
+//         console.log("✏️ User updated");
+
+//         return res.status(200).json({ success: true });
 //       }
-//       await User.findByIdAndUpdate(data.id , userData)
-//       res.json({})
-//       break;
-//     }
 
 //       case "user.deleted": {
-//          await User.findByIdAndDelete(data.id)
-//          res.json({})
-//          break;
-//       }
-//       default:
-//         break;
-//     }
-//   } catch (error) {
-//     console.log(error.message);
-//     res.json({success:false , message :'webhooks error'})
-     
+//         await User.findByIdAndDelete(data.id);
+//         console.log("🗑️ User deleted");
 
+//         return res.status(200).json({ success: true });
+//       }
+
+//       default:
+//         return res.status(200).json({ message: "Event ignored" });
+//     }
+
+//   } catch (error) {
+//     console.log("❌ ERROR:", error.message);
+//     return res.status(500).json({ success: false, message: "Webhook error" });
 //   }
 // };
-import { Webhook } from "svix";
-import User from "../models/User.js";
 
-// API controller function to manage clerk user with database
+
+import { Webhook } from 'svix'
+import User from '../models/User.js'
+
 export const clerkWebhooks = async (req, res) => {
-  console.log("🔥 Webhook hit");
+    try {
+        // 1. Verify the webhook came from Clerk using svix signature
+        const whook = new Webhook(process.env.CLERK_WEBHOOK_SECRET)
 
-  try {
-    const whook = new Webhook(process.env.CLERK_WEBHOOK_SECRET);
+        await whook.verify(JSON.stringify(req.body), {
+            'svix-id': req.headers['svix-id'],
+            'svix-timestamp': req.headers['svix-timestamp'],
+            'svix-signature': req.headers['svix-signature'],
+        })
 
-    // ✅ verify using RAW body (important)
-    await whook.verify(req.body, {
-      "svix-id": req.headers["svix-id"],
-      "svix-timestamp": req.headers["svix-timestamp"],
-      "svix-signature": req.headers["svix-signature"],
-    });
+        const { data, type } = req.body
 
-    // ✅ convert raw buffer to JSON
-    const body = JSON.parse(req.body.toString());
-    const { data, type } = body;
+        // 2. Handle each event type
+        switch (type) {
+            case 'user.created': {
+                const userData = {
+                    clerkId: data.id,
+                    name: `${data.first_name} ${data.last_name}`.trim(),
+                    email: data.email_addresses[0].email_address,
+                    image: data.image_url,
+                    resume: '',
+                }
+                await User.create(userData)
+                console.log(`✅ User created in DB: ${userData.email}`)
+                break
+            }
 
-    console.log("Event:", type);
+            case 'user.updated': {
+                const userData = {
+                    name: `${data.first_name} ${data.last_name}`.trim(),
+                    email: data.email_addresses[0].email_address,
+                    image: data.image_url,
+                }
+                await User.findOneAndUpdate({ clerkId: data.id }, userData)
+                console.log(`✅ User updated in DB: ${userData.email}`)
+                break
+            }
 
-    switch (type) {
+            case 'user.deleted': {
+                await User.findOneAndDelete({ clerkId: data.id })
+                console.log(`✅ User deleted from DB: ${data.id}`)
+                break
+            }
 
-      case "user.created": {
-        const userData = {
-          _id: data.id,
-          email: data.email_addresses[0].email_address,
-          name: data.first_name + " " + data.last_name,
-          image: data.image_url,
-          resume: "",
-        };
+            default:
+                console.log(`Unhandled webhook event type: ${type}`)
+        }
 
-        await User.create(userData);
-        console.log("✅ User saved");
-
-        return res.status(200).json({ success: true });
-      }
-
-      case "user.updated": {
-        const userData = {
-          email: data.email_addresses[0].email_address,
-          name: data.first_name + " " + data.last_name,
-          image: data.image_url,
-        };
-
-        await User.findByIdAndUpdate(data.id, userData);
-        console.log("✏️ User updated");
-
-        return res.status(200).json({ success: true });
-      }
-
-      case "user.deleted": {
-        await User.findByIdAndDelete(data.id);
-        console.log("🗑️ User deleted");
-
-        return res.status(200).json({ success: true });
-      }
-
-      default:
-        return res.status(200).json({ message: "Event ignored" });
+        res.status(200).json({ success: true, message: 'Webhook received' })
+    } catch (error) {
+        console.error('❌ Webhook error:', error.message)
+        res.status(400).json({ success: false, message: error.message })
     }
-
-  } catch (error) {
-    console.log("❌ ERROR:", error.message);
-    return res.status(500).json({ success: false, message: "Webhook error" });
-  }
-};
+}
